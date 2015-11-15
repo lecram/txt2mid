@@ -1,0 +1,47 @@
+.TH TXT2MID 5
+.SH NAME
+txt2mid \- Plain-Text MIDI Notation
+.SH DESCRIPTION
+The \fBtxt2mid\fR tool expects a plain-text file containing a list of tracks.
+Each track begins with the instruction \fBtrack:<channel>\fR, where channel is
+a number between 0 and 15. Any number of track events may follow, until another
+track begins or the end of file is reached.
+.PP
+.RS
+.nf
+track:0
+event1 event2 event3 ...
+track:1
+event1 event2 event3 ...
+...
+.fi
+.RE
+.PP
+\fBduration specification\fR: some track events have a specified duration in the
+following format: \fBdur[*mul][/div]\fR. \fIdur\fR is the duration as a fraction
+of the whole note (4 = quarter note a.k.a. crotchet); \fImul\fR is a duration
+factor; \fIdiv\fR is a duration divisor. This syntax is referred to by
+\fBdur_spec\fR below. It's always optional. Events that don't specify a duration
+have the same duration of the previous event.
+.PP
+\fBnote event\fR: a set of notes to be played simultaneously.
+.PP
+The format is \fBnote1[,note2[,note3[...]]][:dur_spec[%pct]]\fR.
+\fInote\fR is the note pitch, between 0 and 127 (60 = middle C); \fIpct\fR is
+the percentage of the note duration during which the note is heard.
+.PP
+\fBrest event\fR: same as a note event, except that no note is played.
+.PP
+The format is \fB-[:dur_spec]\fR.
+.PP
+\fBtempo event\fR: set music tempo.
+.PP
+The format is \fBtempo:<beats-per-minute>\fR.
+.PP
+\fBpatch event\fR: set track program.
+.PP
+The format is \fBpatch:<program-number>\fR.
+.PP
+\fBrewind\fR: special instruction to go back in time.
+.PP
+The format is \fB<[:dur_spec]\fR.
