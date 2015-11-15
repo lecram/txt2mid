@@ -223,6 +223,13 @@ main()
             ev.offset = offset;
             ev.event.patch = (Patch) {atoi(&word[6])};
             add_event(&q, &ev);
+        } else if (word[0] == '<') {
+            c = strchr(word, ':');
+            if (c != NULL) {
+                duration = get_duration(&c[1]);
+                *c = 0;
+            }
+            offset -= duration;
         } else {
             c = strchr(word, '%');
             if (c != NULL) {
