@@ -166,6 +166,27 @@ save_track(int fd, Queue *q)
     write32(fd, length);
 }
 
+uint32_t
+get_duration(char *str)
+{
+    uint32_t mul, val, div;
+    char *c;
+
+    mul = div = 1;
+    c = strchr(str, '/');
+    if (c != NULL) {
+        div = atoi(&c[1]);
+        *c = 0;
+    }
+    c = strchr(str, '*');
+    if (c != NULL) {
+        mul = atoi(&c[1]);
+        *c = 0;
+    }
+    val = atoi(str);
+    return 4 * TPQ / (div * val / mul);
+}
+
 int
 main()
 {
@@ -210,7 +231,7 @@ main()
             }
             c = strchr(word, ':');
             if (c != NULL) {
-                duration = 4 * TPQ / atoi(&c[1]);
+                duration = get_duration(&c[1]);
                 *c = 0;
             }
             endoff = offset+duration*percent/100;
