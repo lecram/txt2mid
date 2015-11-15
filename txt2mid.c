@@ -18,7 +18,7 @@
 #define TPQ         240
 #define WORD_MAX    64
 
-typedef enum EventType {ET_NOTE, ET_TEMPO} EventType;
+typedef enum EventType {ET_NOTE, ET_TEMPO, ET_PATCH} EventType;
 
 typedef struct Note {
     uint8_t note, value;
@@ -28,12 +28,17 @@ typedef struct Tempo {
     uint32_t bpm;
 } Tempo;
 
+typedef struct Patch {
+    uint8_t patch;
+} Patch;
+
 typedef struct Event {
     EventType type;
     uint32_t offset;
     union {
         Note note;
         Tempo tempo;
+        Patch patch;
     } event;
 } Event;
 
@@ -123,6 +128,10 @@ save_track(int fd, Queue *q)
     off_t len_off;
     uint32_t length;
     uint32_t offset;
+    Event *ev;
+    Note *note;
+    Tempo *tempo;
+    Patch *patch;
 
     write(fd, "MTrk", 4);
     len_off = lseek(fd, 0, SEEK_CUR);
@@ -130,12 +139,10 @@ save_track(int fd, Queue *q)
     length = 4;
     offset = 0;
     for (i = 0; i < q->count; i++) {
-        Event *ev = &q->events[i];
+        ev = &q->events[i];
         length += write_vlv(fd, ev->offset - offset);
         offset = ev->offset;
         switch (ev->type) {
-            Note *note;
-            Tempo *tempo;
         case ET_NOTE:
             note = &ev->event.note;
             length += write(fd,
@@ -147,6 +154,10 @@ save_track(int fd, Queue *q)
             length += 6;
             write(fd, (uint8_t []) {0xFF, 0x51, 0x03}, 3);
             write24(fd, 60000000 / tempo->bpm);
+            break;
+        case ET_PATCH:
+            patch = &ev->event.patch;
+            length += write(fd, (uint8_t []) {0xC0, patch->patch}, 2);
             break;
         }
     }
@@ -185,6 +196,11 @@ main()
             ev.type = ET_TEMPO;
             ev.offset = offset;
             ev.event.tempo = (Tempo) {atoi(&word[6])};
+            add_event(&q, &ev);
+        } else if (!strncmp(word, "patch:", 6)) {
+            ev.type = ET_PATCH;
+            ev.offset = offset;
+            ev.event.patch = (Patch) {atoi(&word[6])};
             add_event(&q, &ev);
         } else {
             c = strchr(word, '%');
