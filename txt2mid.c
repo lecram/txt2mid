@@ -235,17 +235,19 @@ main()
                 *c = 0;
             }
             endoff = offset+duration*percent/100;
-            c = strtok(word, ",");
-            while (c != NULL) {
-                note = atoi(c);
-                ev.type = ET_NOTE;
-                ev.offset = offset;
-                ev.event.note = (Note) {note, 127};
-                add_event(&q, &ev);
-                ev.offset = endoff;
-                ev.event.note = (Note) {note, 0};
-                add_event(&q, &ev);
-                c = strtok(NULL, ",");
+            if (strcmp(word, "-")) {
+                c = strtok(word, ",");
+                while (c != NULL) {
+                    note = atoi(c);
+                    ev.type = ET_NOTE;
+                    ev.offset = offset;
+                    ev.event.note = (Note) {note, 127};
+                    add_event(&q, &ev);
+                    ev.offset = endoff;
+                    ev.event.note = (Note) {note, 0};
+                    add_event(&q, &ev);
+                    c = strtok(NULL, ",");
+                }
             }
             offset += duration;
         }
