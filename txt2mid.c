@@ -7,6 +7,9 @@
 #include <unistd.h>
 
 #define write16(fd, n)  write((fd), (uint8_t []) {(n) >> 8, (n) & 0xFF}, 2)
+#define write24(fd, n)  write((fd), (uint8_t []) \
+                            {(n) >> 16, ((n) >> 8) & 0xFF, (n) & 0xFF} \
+                        , 3)
 #define write32(fd, n)  do { \
                             write16((fd), (n) >> 16); \
                             write16((fd), (n) & 0xFFFF); \
@@ -15,10 +18,23 @@
 #define TPQ         240
 #define WORD_MAX    64
 
+typedef enum EventType {ET_NOTE, ET_TEMPO} EventType;
+
+typedef struct Note {
+    uint8_t note, value;
+} Note;
+
+typedef struct Tempo {
+    uint32_t bpm;
+} Tempo;
 
 typedef struct Event {
+    EventType type;
     uint32_t offset;
-    uint8_t note, value;
+    union {
+        Note note;
+        Tempo tempo;
+    } event;
 } Event;
 
 typedef struct Queue {
@@ -117,7 +133,22 @@ save_track(int fd, Queue *q)
         Event *ev = &q->events[i];
         length += write_vlv(fd, ev->offset - offset);
         offset = ev->offset;
-        length += write(fd, (uint8_t []) {0x90, ev->note, ev->value}, 3);
+        switch (ev->type) {
+            Note *note;
+            Tempo *tempo;
+        case ET_NOTE:
+            note = &ev->event.note;
+            length += write(fd,
+                (uint8_t []) {0x90, note->note, note->value}, 3
+            );
+            break;
+        case ET_TEMPO:
+            tempo = &ev->event.tempo;
+            length += 6;
+            write(fd, (uint8_t []) {0xFF, 0x51, 0x03}, 3);
+            write24(fd, 60000000 / tempo->bpm);
+            break;
+        }
     }
     write(fd, (uint8_t []) {0x00, 0xFF, 0x2F, 0x00}, 4);
     lseek(fd, len_off, SEEK_SET);
@@ -133,6 +164,7 @@ main()
     uint8_t note;
     char *c;
     Queue *q;
+    Event ev;
     int mid;
 
     mid = 1;
@@ -149,25 +181,37 @@ main()
     while (1) {
         n = read_word(0, word, WORD_MAX);
         if (n == 0) break;
-        c = strchr(word, '%');
-        if (c != NULL) {
-            percent = atoi(&c[1]);
-            *c = 0;
+        if (!strncmp(word, "tempo:", 6)) {
+            ev.type = ET_TEMPO;
+            ev.offset = offset;
+            ev.event.tempo = (Tempo) {atoi(&word[6])};
+            add_event(&q, &ev);
+        } else {
+            c = strchr(word, '%');
+            if (c != NULL) {
+                percent = atoi(&c[1]);
+                *c = 0;
+            }
+            c = strchr(word, ':');
+            if (c != NULL) {
+                duration = 4 * TPQ / atoi(&c[1]);
+                *c = 0;
+            }
+            endoff = offset+duration*percent/100;
+            c = strtok(word, ",");
+            while (c != NULL) {
+                note = atoi(c);
+                ev.type = ET_NOTE;
+                ev.offset = offset;
+                ev.event.note = (Note) {note, 127};
+                add_event(&q, &ev);
+                ev.offset = endoff;
+                ev.event.note = (Note) {note, 0};
+                add_event(&q, &ev);
+                c = strtok(NULL, ",");
+            }
+            offset += duration;
         }
-        c = strchr(word, ':');
-        if (c != NULL) {
-            duration = 4 * TPQ / atoi(&c[1]);
-            *c = 0;
-        }
-        endoff = offset+duration*percent/100;
-        c = strtok(word, ",");
-        while (c != NULL) {
-            note = atoi(c);
-            add_event(&q, &((Event) {offset, note, 127}));
-            add_event(&q, &((Event) {endoff, note, 0}));
-            c = strtok(NULL, ",");
-        }
-        offset += duration;
     }
     sort_queue(q);
     save_track(mid, q);
