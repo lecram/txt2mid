@@ -85,13 +85,13 @@ read_word(int fd, char *buffer, size_t n)
 }
 
 Queue *
-new_queue(unsigned init_bulk)
+new_queue()
 {
     Queue *queue;
 
-    queue = malloc(sizeof(*queue) + init_bulk * sizeof(queue->events[0]));
+    queue = malloc(sizeof(*queue) + 0x10 * sizeof(queue->events[0]));
     if (queue) {
-        queue->bulk = init_bulk;
+        queue->bulk = 0x10;
         queue->count = 0;
     }
     return queue;
@@ -122,7 +122,7 @@ sort_queue(Queue *q)
 }
 
 void
-save_track(int fd, Queue *q)
+save_track(int fd, Queue *q, uint8_t channel)
 {
     unsigned i;
     off_t len_off;
@@ -146,7 +146,7 @@ save_track(int fd, Queue *q)
         case ET_NOTE:
             note = &ev->event.note;
             length += write(fd,
-                (uint8_t []) {0x90, note->note, note->value}, 3
+                (uint8_t []) {0x90 | channel, note->note, note->value}, 3
             );
             break;
         case ET_TEMPO:
@@ -157,13 +157,14 @@ save_track(int fd, Queue *q)
             break;
         case ET_PATCH:
             patch = &ev->event.patch;
-            length += write(fd, (uint8_t []) {0xC0, patch->patch}, 2);
+            length += write(fd, (uint8_t []) {0xC0 | channel, patch->patch}, 2);
             break;
         }
     }
     write(fd, (uint8_t []) {0x00, 0xFF, 0x2F, 0x00}, 4);
     lseek(fd, len_off, SEEK_SET);
     write32(fd, length);
+    lseek(fd, 0, SEEK_END);
 }
 
 uint32_t
@@ -197,23 +198,39 @@ main()
     char *c;
     Queue *q;
     Event ev;
+    uint8_t channel;
+    int tracks;
     int mid;
 
     mid = 1;
     write(mid, "MThd", 4);
     write32(mid, 6);
     write16(mid, 1);
-    write16(mid, 1); /* # of tracks */
+    write16(mid, 0); /* # of tracks; postponed */
     write16(mid, TPQ); /* ticks per quarter-note */
 
+    channel = 0;
+    tracks = 0;
+    q = new_queue();
     offset = 0;
     duration = 4;
     percent = 95;
-    q = new_queue(0x10);
     while (1) {
         n = read_word(0, word, WORD_MAX);
         if (n == 0) break;
-        if (!strncmp(word, "tempo:", 6)) {
+        if (!strncmp(word, "track:", 6)) {
+            if (q->count) {
+                sort_queue(q);
+                save_track(mid, q, channel);
+                free(q);
+                q = new_queue();
+                tracks++;
+                offset = 0;
+                duration = 4;
+                percent = 95;
+            }
+            channel = atoi(&word[6]);
+        } else if (!strncmp(word, "tempo:", 6)) {
             ev.type = ET_TEMPO;
             ev.offset = offset;
             ev.event.tempo = (Tempo) {atoi(&word[6])};
@@ -260,8 +277,11 @@ main()
         }
     }
     sort_queue(q);
-    save_track(mid, q);
+    save_track(mid, q, channel);
     free(q);
+    tracks++;
+    lseek(mid, 10, SEEK_SET);
+    write16(mid, tracks);
     close(mid);
     return 0;
 }
