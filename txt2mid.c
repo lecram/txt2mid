@@ -238,7 +238,7 @@ main()
         } else if (!strncmp(word, "patch:", 6)) {
             ev.type = ET_PATCH;
             ev.offset = offset;
-            ev.event.patch = (Patch) {atoi(&word[6])};
+            ev.event.patch = (Patch) {atoi(&word[6]) - 1};
             add_event(&q, &ev);
         } else if (word[0] == '<') {
             c = strchr(word, ':');
